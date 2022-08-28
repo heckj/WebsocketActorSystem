@@ -8,7 +8,7 @@ DerivedData/
 .swiftpm/xcode/package.xcworkspace/contents.xcworkspacedata
 .netrc
 .symbol-graphs
-Sources/WebsocketSystem/Documentation.docc/.docc-build
+Sources/WebsocketActorSystem/Documentation.docc/.docc-build/
 all_identifiers.txt
 all_symbols.txt
 docs
