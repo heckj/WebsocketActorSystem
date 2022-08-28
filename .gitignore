@@ -1,0 +1,14 @@
+.DS_Store
+/.build
+/Packages
+/*.xcodeproj
+xcuserdata/
+DerivedData/
+.swiftpm/config/registries.json
+.swiftpm/xcode/package.xcworkspace/contents.xcworkspacedata
+.netrc
+.symbol-graphs
+Sources/WebsocketSystem/Documentation.docc/.docc-build
+all_identifiers.txt
+all_symbols.txt
+docs
