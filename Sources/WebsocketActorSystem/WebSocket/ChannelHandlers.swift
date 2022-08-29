@@ -1,19 +1,19 @@
 /*
-See LICENSE folder for this sample’s licensing information.
+ See LICENSE folder for this sample’s licensing information.
 
-Abstract:
-Channel handlers used to implement the networking layer of
+ Abstract:
+ Channel handlers used to implement the networking layer of
 
-  Based on the WebSocket example available in the NIO repository:
-  https://github.com/apple/swift-nio/blob/main/Sources/NIOWebSocketServer/main.swift
-*/
+   Based on the WebSocket example available in the NIO repository:
+   https://github.com/apple/swift-nio/blob/main/Sources/NIOWebSocketServer/main.swift
+ */
 
-import NIOCore
-import NIOPosix
-import NIOHTTP1
 import Distributed
-import NIOWebSocket
 import Foundation
+import NIOCore
+import NIOHTTP1
+import NIOPosix
+import NIOWebSocket
 
 public struct WebSocketReplyEnvelope: Sendable, Codable {
     let callID: WebSocketActorSystem.CallID
@@ -22,6 +22,7 @@ public struct WebSocketReplyEnvelope: Sendable, Codable {
 }
 
 // ===== --------------------------------------------------------------------------------------------------------------
+
 // MARK: Client-side handlers
 
 struct ConnectTo {
@@ -38,35 +39,34 @@ final class HTTPInitialRequestHandler: ChannelInboundHandler, RemovableChannelHa
     public init(target: ConnectTo) {
         self.target = target
     }
-    
+
     public func channelActive(context: ChannelHandlerContext) {
         // We are connected. It's time to send the message to the server to initialize the upgrade dance.
         var headers = HTTPHeaders()
         headers.add(name: "Host", value: "\(target.host):\(target.port)")
         headers.add(name: "Content-Type", value: "text/plain; charset=utf-8")
         headers.add(name: "Content-Length", value: "\(0)")
-        
+
         let requestHead = HTTPRequestHead(version: .http1_1,
                                           method: .GET,
                                           uri: "/",
                                           headers: headers)
-        
-        context.write(self.wrapOutboundOut(.head(requestHead)), promise: nil)
-        
+
+        context.write(wrapOutboundOut(.head(requestHead)), promise: nil)
+
         let body = HTTPClientRequestPart.body(.byteBuffer(ByteBuffer()))
-        context.write(self.wrapOutboundOut(body), promise: nil)
-        
-        context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: nil)
+        context.write(wrapOutboundOut(body), promise: nil)
+
+        context.writeAndFlush(wrapOutboundOut(.end(nil)), promise: nil)
     }
-    
+
     public func channelRead(context: ChannelHandlerContext, data: NIOAny) {
-        
-        let clientResponse = self.unwrapInboundIn(data)
-        
+        let clientResponse = unwrapInboundIn(data)
+
         switch clientResponse {
-        case .head(let responseHead):
+        case let .head(responseHead):
             print("Received status: \(responseHead.status)")
-        case .body(let byteBuffer):
+        case let .body(byteBuffer):
             let string = String(buffer: byteBuffer)
             print("Received: '\(string)' back from the server.")
         case .end:
@@ -74,14 +74,14 @@ final class HTTPInitialRequestHandler: ChannelInboundHandler, RemovableChannelHa
             context.close(promise: nil)
         }
     }
-    
-    public func handlerRemoved(context: ChannelHandlerContext) {
+
+    public func handlerRemoved(context _: ChannelHandlerContext) {
         print("HTTP handler removed.")
     }
-    
+
     public func errorCaught(context: ChannelHandlerContext, error: Error) {
         print("error: ", error)
-        
+
         // As we are not really interested getting notified on success or failure
         // we just pass nil as promise to reduce allocations.
         context.close(promise: nil)
@@ -91,31 +91,31 @@ final class HTTPInitialRequestHandler: ChannelInboundHandler, RemovableChannelHa
 final class WebSocketMessageOutboundHandler: ChannelOutboundHandler {
     typealias OutboundIn = WebSocketWireEnvelope
     typealias OutboundOut = WebSocketFrame
-    
+
     let actorSystem: WebSocketActorSystem
     init(actorSystem: WebSocketActorSystem) {
         self.actorSystem = actorSystem
     }
-    
-    public func handlerRemoved(context: ChannelHandlerContext) {
+
+    public func handlerRemoved(context _: ChannelHandlerContext) {
         // While we do this, we should also notify the system about any cleanups
         // it might need to do. E.g. if it has receptionist connections to the peer
         // that has now disconnected, we should stop tasks interacting with it etc.
         print("WebSocket handler removed.")
     }
-    
-    func write(context: ChannelHandlerContext, data: NIOAny, promise: EventLoopPromise<Void>?) {
+
+    func write(context: ChannelHandlerContext, data: NIOAny, promise _: EventLoopPromise<Void>?) {
         log("write", "unwrap \(Self.OutboundIn.self)")
-        let envelope: WebSocketWireEnvelope = self.unwrapOutboundIn(data)
+        let envelope: WebSocketWireEnvelope = unwrapOutboundIn(data)
 
         switch envelope {
         case .connectionClose:
             var data = context.channel.allocator.buffer(capacity: 2)
             data.write(webSocketErrorCode: .protocolError)
             let frame = WebSocketFrame(fin: true,
-                opcode: .connectionClose,
-                data: data)
-            context.writeAndFlush(self.wrapOutboundOut(frame)).whenComplete { (_: Result<Void, Error>) in
+                                       opcode: .connectionClose,
+                                       data: data)
+            context.writeAndFlush(wrapOutboundOut(frame)).whenComplete { (_: Result<Void, Error>) in
                 context.close(promise: nil)
             }
         case .reply, .call:
@@ -128,7 +128,7 @@ final class WebSocketMessageOutboundHandler: ChannelOutboundHandler {
                 log("outbound-call", "Write: \(envelope), to: \(context)")
 
                 let frame = WebSocketFrame(fin: true, opcode: .text, data: data)
-                context.writeAndFlush(self.wrapOutboundOut(frame), promise: nil)
+                context.writeAndFlush(wrapOutboundOut(frame), promise: nil)
             } catch {
                 log("outbound-call", "Failed to serialize call [\(envelope)], error: \(error)")
             }
@@ -137,53 +137,54 @@ final class WebSocketMessageOutboundHandler: ChannelOutboundHandler {
 }
 
 // ===== --------------------------------------------------------------------------------------------------------------
+
 // MARK: Server-side handlers
 
 final class HTTPHandler: ChannelInboundHandler, RemovableChannelHandler {
     typealias InboundIn = HTTPServerRequestPart
     typealias OutboundOut = HTTPServerResponsePart
-    
+
     private var responseBody: ByteBuffer!
-    
+
     func handlerAdded(context: ChannelHandlerContext) {
-        self.responseBody = context.channel.allocator.buffer(string: "<html><head></head><body><h2>Tic Tac Fish WS Server System</h2></body></html>")
+        responseBody = context.channel.allocator.buffer(string: "<html><head></head><body><h2>Tic Tac Fish WS Server System</h2></body></html>")
     }
-    
-    func handlerRemoved(context: ChannelHandlerContext) {
-        self.responseBody = nil
+
+    func handlerRemoved(context _: ChannelHandlerContext) {
+        responseBody = nil
     }
-    
+
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
         log("write", "unwrap \(Self.InboundIn.self)")
-        let reqPart = self.unwrapInboundIn(data)
-        
+        let reqPart = unwrapInboundIn(data)
+
         // We're not interested in request bodies here: we're just serving up GET responses
         // to get the client to initiate a websocket request.
-        guard case .head(let head) = reqPart else {
+        guard case let .head(head) = reqPart else {
             return
         }
-        
+
         // GETs only.
         guard case .GET = head.method else {
-            self.respond405(context: context)
+            respond405(context: context)
             return
         }
-        
+
         var headers = HTTPHeaders()
         headers.add(name: "Content-Type", value: "text/html")
-        headers.add(name: "Content-Length", value: String(self.responseBody.readableBytes))
+        headers.add(name: "Content-Length", value: String(responseBody.readableBytes))
         headers.add(name: "Connection", value: "close")
         let responseHead = HTTPResponseHead(version: .init(major: 1, minor: 1),
                                             status: .ok,
                                             headers: headers)
-        context.write(self.wrapOutboundOut(.head(responseHead)), promise: nil)
-        context.write(self.wrapOutboundOut(.body(.byteBuffer(self.responseBody))), promise: nil)
-        context.write(self.wrapOutboundOut(.end(nil))).whenComplete { (_: Result<Void, Error>) in
+        context.write(wrapOutboundOut(.head(responseHead)), promise: nil)
+        context.write(wrapOutboundOut(.body(.byteBuffer(responseBody))), promise: nil)
+        context.write(wrapOutboundOut(.end(nil))).whenComplete { (_: Result<Void, Error>) in
             context.close(promise: nil)
         }
         context.flush()
     }
-    
+
     private func respond405(context: ChannelHandlerContext) {
         var headers = HTTPHeaders()
         headers.add(name: "Connection", value: "close")
@@ -191,8 +192,8 @@ final class HTTPHandler: ChannelInboundHandler, RemovableChannelHandler {
         let head = HTTPResponseHead(version: .http1_1,
                                     status: .methodNotAllowed,
                                     headers: headers)
-        context.write(self.wrapOutboundOut(.head(head)), promise: nil)
-        context.write(self.wrapOutboundOut(.end(nil))).whenComplete { (_: Result<Void, Error>) in
+        context.write(wrapOutboundOut(.head(head)), promise: nil)
+        context.write(wrapOutboundOut(.end(nil))).whenComplete { (_: Result<Void, Error>) in
             context.close(promise: nil)
         }
         context.flush()
@@ -202,16 +203,16 @@ final class HTTPHandler: ChannelInboundHandler, RemovableChannelHandler {
 final class WebSocketActorMessageInboundHandler: ChannelInboundHandler {
     typealias InboundIn = WebSocketFrame
     typealias OutboundOut = WebSocketWireEnvelope
-    
+
     private var awaitingClose: Bool = false
-    
+
     private let actorSystem: WebSocketActorSystem
     init(actorSystem: WebSocketActorSystem) {
         self.actorSystem = actorSystem
     }
-    
+
     public func channelRead(context: ChannelHandlerContext, data: NIOAny) {
-        let frame = self.unwrapInboundIn(data)
+        let frame = unwrapInboundIn(data)
 
         switch frame.opcode {
         case .connectionClose:
@@ -234,15 +235,15 @@ final class WebSocketActorMessageInboundHandler: ChannelInboundHandler {
             break
         default:
             // Unknown frames are errors.
-            self.closeOnError(context: context)
+            closeOnError(context: context)
         }
     }
-    
+
     public func channelReadComplete(context: ChannelHandlerContext) {
         context.flush()
     }
 
-    private func receivedClose(context: ChannelHandlerContext, frame: WebSocketFrame) {
+    private func receivedClose(context: ChannelHandlerContext, frame _: WebSocketFrame) {
         // Handle a received close frame. In websockets, we're just going to send the close
         // frame and then close, unless we already sent our own close frame.
         if awaitingClose {
@@ -252,19 +253,19 @@ final class WebSocketActorMessageInboundHandler: ChannelInboundHandler {
             // This is an unsolicited close. We're going to send a response frame and
             // then, when we've sent it, close up shop. We should send back the close code the remote
             // peer sent us, unless they didn't send one at all.
-            _ = context.write(self.wrapOutboundOut(.connectionClose)).map { () in
+            _ = context.write(wrapOutboundOut(.connectionClose)).map { () in
                 context.close(promise: nil)
             }
         }
     }
-    
+
     private func closeOnError(context: ChannelHandlerContext) {
         // We have hit an error, we want to close. We do that by sending a close frame and then
         // shutting down the write side of the connection.
         var data = context.channel.allocator.buffer(capacity: 2)
         data.write(webSocketErrorCode: .protocolError)
 
-        context.write(self.wrapOutboundOut(.connectionClose)).whenComplete { (_: Result<Void, Error>) in
+        context.write(wrapOutboundOut(.connectionClose)).whenComplete { (_: Result<Void, Error>) in
             context.close(mode: .output, promise: nil)
         }
 

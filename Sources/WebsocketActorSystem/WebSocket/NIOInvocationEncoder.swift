@@ -1,21 +1,21 @@
 /*
-See LICENSE folder for this sample’s licensing information.
+ See LICENSE folder for this sample’s licensing information.
 
-Abstract:
-Invocation decoder from a NIO byte buffer.
-*/
+ Abstract:
+ Invocation decoder from a NIO byte buffer.
+ */
 
 import Distributed
 import Foundation
 import NIO
 import NIOConcurrencyHelpers
 #if os(iOS) || os(macOS)
-import NIOTransportServices
+    import NIOTransportServices
 #endif
 import NIOCore
+import NIOFoundationCompat
 import NIOHTTP1
 import NIOWebSocket
-import NIOFoundationCompat
 
 @available(iOS 16.0, *)
 public class NIOInvocationDecoder: DistributedTargetInvocationDecoder {
@@ -27,7 +27,7 @@ public class NIOInvocationDecoder: DistributedTargetInvocationDecoder {
 
     public init(system: WebSocketActorSystem, envelope: RemoteWebSocketCallEnvelope) {
         self.envelope = envelope
-        self.argumentsIterator = envelope.args.makeIterator()
+        argumentsIterator = envelope.args.makeIterator()
 
         let decoder = JSONDecoder()
         decoder.userInfo[.actorSystemKey] = system
@@ -35,8 +35,8 @@ public class NIOInvocationDecoder: DistributedTargetInvocationDecoder {
     }
 
     public func decodeGenericSubstitutions() throws -> [Any.Type] {
-        return envelope.genericSubs.compactMap { name in
-            return _typeByName(name)
+        envelope.genericSubs.compactMap { name in
+            _typeByName(name)
         }
     }
 
